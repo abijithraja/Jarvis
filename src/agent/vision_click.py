@@ -1,9 +1,14 @@
 import pyautogui
 import pytesseract
 import numpy as np
+from src.utils.tesseract_config import resolve_tesseract_cmd
 
 
 def find_and_click(text_to_find):
+    tesseract_cmd = resolve_tesseract_cmd()
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
     screenshot = pyautogui.screenshot()
     img = np.array(screenshot)
 

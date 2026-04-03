@@ -11,11 +11,18 @@ from src.memory.task_memory import add_task, get_tasks
 from src.utils.code_writer import write_code_to_file
 from src.agent.planner import create_plan
 from src.agent.executor import execute_plan
+from src.utils.runtime_checks import collect_runtime_warnings
 import time
 
 
 def run_jarvis():
     print("🤖 Jarvis: Ready...")
+
+    startup_warnings = collect_runtime_warnings()
+    if startup_warnings:
+        print("⚠️ Startup diagnostics:")
+        for warning in startup_warnings:
+            print(f"- {warning}")
 
     try:
         while True:
