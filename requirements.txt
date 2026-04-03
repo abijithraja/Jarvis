@@ -3,3 +3,13 @@ sounddevice
 pyttsx3
 numpy
 scipy
+requests
+webrtcvad-wheels
+pvporcupine
+pyautogui
+pygetwindow
+selenium
+webdriver-manager
+opencv-python
+pytesseract
+beautifulsoup4

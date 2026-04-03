@@ -1,41 +1,21 @@
 from faster_whisper import WhisperModel
-from src.audio.recorder import record_audio
-import os
+from src.audio.vad_recorder import record_speech
 
-model = None
-
-
-def get_model():
-    global model
-
-    if model is None:
-        model = WhisperModel("base", device="cpu", compute_type="int8")
-
-    return model
+model = WhisperModel("base", device="cpu")
 
 
 def transcribe_audio():
-    audio_path = record_audio()
+    audio_path = record_speech()
 
     if not audio_path:
-        return ""
+        return None
 
-    try:
-        segments, _ = get_model().transcribe(
-            audio_path,
-            condition_on_previous_text=False,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
-        )
-    except Exception as err:
-        print(f"❌ Transcription error: {err}")
-        return ""
-    finally:
-        try:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
-        except OSError:
-            pass
+    segments, _ = model.transcribe(
+        audio_path,
+        language="en",
+        beam_size=1,
+        condition_on_previous_text=False,
+    )
 
     text = ""
     for segment in segments:

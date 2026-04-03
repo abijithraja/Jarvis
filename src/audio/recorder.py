@@ -31,7 +31,7 @@ def record_audio(filename=None):
     except KeyboardInterrupt:
         sd.stop()
         print("🛑 Recording interrupted")
-        return None
+        raise
     except sd.PortAudioError as err:
         print(f"❌ Microphone error: {err}")
         return None
