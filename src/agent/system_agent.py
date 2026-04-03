@@ -18,6 +18,7 @@ def handle_system_command(text: str):
 
     # Fix common speech-to-text mishearing
     t = t.replace("one pad", "notepad").replace("note pad", "notepad")
+    t = t.replace("sptoify", "spotify").replace("spotifiy", "spotify")
 
     # Handle chained commands: "open notepad and type hello"
     if " and " in t:
@@ -43,6 +44,12 @@ def handle_system_command(text: str):
     if "close calculator" in t:
         subprocess.call("taskkill /f /im calc.exe", shell=True)
         return "Closing Calculator."
+
+    if "close spotify" in t or "quit spotify" in t or "exit spotify" in t:
+        subprocess.call("taskkill /f /im Spotify.exe", shell=True)
+        if state.current_app == "spotify":
+            state.current_app = None
+        return "Closing Spotify."
 
     # --- TYPE ---
     if t.startswith("type"):

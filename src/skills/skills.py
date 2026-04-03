@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
+from src.memory import state
 
 _SKILLS: dict = {}
 
@@ -148,10 +149,49 @@ def news_skill(text: str) -> str:
     "spotify", "open spotify", "pause spotify", "play spotify", "resume spotify",
     "skip spotify", "next song", "previous song", "shuffle spotify", "play on spotify",
     "resume playback spotify", "stop spotify", "pause music", "stop music",
-    "pause the music", "stop the music", "stop playback"
+    "pause the music", "stop the music", "stop playback", "play", "pause",
+    "next", "previous", "resume"
 ])
-def spotify_skill(text: str) -> str:
-    lower = text.lower()
+def spotify_skill(text: str) -> str | None:
+    lower = text.lower().strip()
+    lower = re.sub(r"\brsum\b", "resume", lower)
+    lower = re.sub(r"\bresum\b", "resume", lower)
+    lower = re.sub(r"\bsptoify\b", "spotify", lower)
+    lower = re.sub(r"\bspotifiy\b", "spotify", lower)
+    lower = re.sub(r"\bpreviosu\b", "previous", lower)
+    lower = re.sub(r"\bprevios\b", "previous", lower)
+    lower = re.sub(r"\bprvious\b", "previous", lower)
+    lower = re.sub(r"\bnxt\b", "next", lower)
+
+    # Let app-close commands be handled by system_agent.
+    if re.search(r"\b(close|quit|exit)\b.*\bspotify\b", lower) or re.search(r"\bspotify\b.*\b(close|quit|exit)\b", lower):
+        return None
+
+    playback_words = ["play", "pause", "stop", "resume", "next", "previous", "back", "skip"]
+    media_words = ["music", "song", "track", "playback"]
+    has_playback_word = any(w in lower for w in playback_words)
+    has_media_word = any(w in lower for w in media_words)
+    mentions_spotify = "spotify" in lower
+    compact = re.sub(r"\s+", " ", lower).strip(" .?!")
+    plain_controls = {
+        "play", "pause", "stop", "resume", "next", "previous", "back", "skip",
+        "next song", "previous song", "play music", "pause music", "stop music"
+    }
+
+    # Let YouTube/browser flow handle commands like "play rain music on youtube".
+    if "youtube" in lower and not mentions_spotify:
+        return None
+
+    # For generic media commands, require spotify context unless user explicitly says spotify.
+    if not mentions_spotify and has_playback_word:
+        if compact in plain_controls:
+            pass
+        elif state.current_app != "spotify" and not has_media_word:
+            return None
+
+    if not mentions_spotify and not has_playback_word:
+        return None
+
     try:
         import subprocess, platform
         if platform.system() != "Windows":
@@ -159,13 +199,17 @@ def spotify_skill(text: str) -> str:
 
         if any(p in lower for p in ["open spotify", "launch spotify", "start spotify"]):
             subprocess.Popen("start spotify", shell=True)
+            state.current_app = "spotify"
             return "Opening Spotify."
 
         # Use Spotify web API if token set, else use keyboard shortcuts
         token = os.environ.get("SPOTIFY_TOKEN")
         if token:
             return _spotify_api(lower, token)
-        return _spotify_keys(lower)
+        result = _spotify_keys(lower)
+        if result and "not recognised" not in result.lower():
+            state.current_app = "spotify"
+        return result
     except Exception as e:
         return f"Spotify error: {e}"
 
@@ -178,7 +222,7 @@ def _spotify_keys(lower: str) -> str:
     elif "next" in lower or "skip" in lower:
         pyautogui.press("nexttrack")
         return "Skipped to next track."
-    elif "previous" in lower or "back" in lower:
+    elif "previous" in lower or "back" in lower or "prev" in lower or "prv" in lower:
         pyautogui.press("prevtrack")
         return "Went back a track."
     elif "play" in lower or "resume" in lower:
@@ -200,7 +244,7 @@ def _spotify_api(lower: str, token: str) -> str:
     elif "next" in lower or "skip" in lower:
         requests.post(f"{base}/next", headers=headers)
         return "Skipped to next track."
-    elif "previous" in lower:
+    elif "previous" in lower or "back" in lower or "prev" in lower or "prv" in lower:
         requests.post(f"{base}/previous", headers=headers)
         return "Went back a track."
     return "Spotify command not recognised."
