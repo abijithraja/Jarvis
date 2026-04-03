@@ -1,78 +1,134 @@
-# Jarvis AI — Setup & Run Guide
+# Jarvis AI Assistant
 
-## 1. Install dependencies
-```bash
+Jarvis is a local, voice-enabled AI assistant for Windows that combines speech recognition, local LLM responses, text-to-speech, desktop automation, and optional browser and vision tools.
+
+Status: This is an experimental project and is still in progress.
+
+## What It Does
+
+- Listens to microphone input and transcribes speech using Faster-Whisper.
+- Generates responses through a local Ollama model.
+- Speaks responses using pyttsx3 with optional edge-tts support.
+- Executes desktop tasks such as opening apps, typing text, closing apps, and web search.
+- Stores simple memory facts and recent task history.
+- Supports optional browser automation, OCR screen reading, and web summarization.
+
+## Prerequisites
+
+1. Windows 10 or 11
+2. Python 3.10 or newer
+3. A working microphone
+4. Ollama installed and running
+
+Optional (for OCR and vision features):
+- Tesseract OCR installed and available on PATH, or configured via TESSERACT_CMD
+
+## Installation
+
+From PowerShell in the project root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-## 2. Install Tesseract OCR (for screen reading)
-- Windows: https://github.com/UB-Mannheim/tesseract/wiki
-- Install to default path: `C:\Program Files\Tesseract-OCR\`
+## Ollama Setup
 
-## 3. Install & start Ollama (for AI responses)
-- Download: https://ollama.com
-- Pull the model:
-```bash
-ollama pull llama3
+Install and start Ollama, then pull the configured model:
+
+```powershell
 ollama serve
+ollama pull qwen2.5:14b
 ```
 
-## 4. Run Jarvis
+Jarvis expects Ollama at:
+- http://localhost:11434
 
-### Terminal mode:
-```bash
+## Run Jarvis
+
+Option 1:
+
+```powershell
+.\run_jarvis_cmd.bat
+```
+
+Option 2:
+
+```powershell
 python main.py
 ```
 
-### GUI mode:
-```bash
+Option 3 (GUI):
+
+```powershell
 python jarvis_gui.py
 ```
 
----
+## Project Structure
 
-## File structure
-```
-jarvis/
-├── main.py                    # Entry point
-├── jarvis_gui.py              # GUI launcher
-├── requirements.txt
-└── src/
-    ├── audio/
-    │   └── vad_recorder.py    # Mic recording with silence detection
-    ├── stt/
-    │   └── whisper_stt.py     # Speech-to-text via Whisper
-    ├── llm/
-    │   └── ollama_client.py   # LLM via Ollama (llama3)
-    ├── tts/
-    │   └── speaker.py         # Text-to-speech
-    ├── router/
-    │   └── intent_router.py   # Classify user intent
-    ├── memory/
-    │   ├── memory.py          # Persistent key-value memory
-    │   ├── task_memory.py     # Session task history
-    │   └── state.py           # Runtime app state
-    ├── agent/
-    │   ├── system_agent.py    # Desktop commands (open/close/type)
-    │   ├── external_agent.py  # Apps, browser, web search
-    │   ├── browser_agent.py   # Selenium browser automation
-    │   ├── web_agent.py       # DuckDuckGo search + summarize
-    │   ├── vision.py          # Screen OCR
-    │   ├── planner.py         # LLM-based task planner
-    │   └── executor.py        # Step executor
-    └── utils/
-        ├── system_tools.py    # Time / date
-        ├── animation.py       # Thinking spinner
-        ├── code_writer.py     # Save generated code to file
-        └── runtime_checks.py  # Startup diagnostics
+```text
+Jarvis/
+|- main.py
+|- jarvis_gui.py
+|- run_jarvis_cmd.bat
+|- requirements.txt
+|- src/
+|  |- audio/
+|  |- stt/
+|  |- llm/
+|  |- tts/
+|  |- router/
+|  |- memory/
+|  |- agent/
+|  |- skills/
+|  \- utils/
+\- README.md
 ```
 
-## Common issues
+## Common Voice Commands
 
-| Problem | Fix |
-|---|---|
-| `Ollama not running` | Run `ollama serve` in a terminal |
-| `No module named pvporcupine` | Wake word is optional — Jarvis still works without it |
-| `Tesseract not found` | Install Tesseract or skip — vision features are optional |
-| `Mic not recording` | Check default input device in system sound settings |
-| `llama3 not found` | Run `ollama pull llama3` |
+- open notepad
+- close notepad
+- open chrome
+- open youtube and play rain music
+- open spotify
+- pause music
+- next song
+- what is my name
+- my name is Abijith
+- what is the time
+
+## Runtime Diagnostics
+
+On startup, Jarvis checks optional dependencies and service availability:
+
+- Ollama reachability
+- Tesseract availability
+- Optional packages such as selenium, pyautogui, pytesseract, opencv-python, and beautifulsoup4
+
+If some components are missing, core voice chat can still run while those features are disabled.
+
+## Troubleshooting
+
+### Ollama not reachable
+- Make sure ollama serve is running.
+- Verify http://localhost:11434/api/tags is accessible.
+
+### No speech recognition output
+- Check microphone permissions in Windows settings.
+- Confirm the selected input device is active.
+- Speak clearly and pause briefly after commands.
+
+### OCR not working
+- Install Tesseract OCR.
+- Add tesseract.exe to PATH or set environment variable TESSERACT_CMD.
+
+### Automation commands not acting
+- Keep target windows in focus.
+- Run the terminal as standard user, or admin if required by target apps.
+
+## Notes
+
+- jarvis_all_in_one.py contains a merged snapshot of multiple modules for reference.
+- The modular code under src is the source of truth for ongoing development.
