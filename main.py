@@ -3,20 +3,25 @@ from src.tts.speaker import speak
 
 
 def main():
-	print("Jarvis started...")
+	print("🚀 Jarvis is running... (Press Ctrl+C to stop)")
 
-	while True:
-		text = transcribe_audio()
+	try:
+		while True:
+			text = transcribe_audio()
 
-		if not text:
-			continue
+			if not text:
+				print("⚠️ No speech detected")
+				continue
 
-		print("You:", text)
+			print("🧑 You:", text)
 
-		response = f"You said: {text}"
+			response = f"You said: {text}"
 
-		speak(response)
+			print("🤖 Jarvis:", response)
+			speak(response)
+	except KeyboardInterrupt:
+		print("\n👋 Jarvis stopped.")
 
 
 if __name__ == "__main__":
-	main()
+    main()
