@@ -1,11 +1,10 @@
 from src.stt.whisper_stt import transcribe_audio
-from src.llm.ollama_client import generate_response, stream_response
+from src.llm.ollama_client import generate_response
 from src.router.intent_router import detect_intent
 from src.utils.system_tools import get_time
 from src.agent.external_agent import run_external_agent
 from src.agent.system_agent import handle_system_command
 from src.tts.speaker import speak
-from src.utils.animation import start_thinking, stop_thinking
 from src.memory.memory import store_fact, get_fact
 from src.memory.task_memory import add_task, get_tasks
 from src.utils.code_writer import write_code_to_file
@@ -16,12 +15,12 @@ import time
 
 
 def run_jarvis():
-    print("🤖 Jarvis: Ready...")
+    print("STATUS  : Ready")
 
     startup_warnings = collect_runtime_warnings()
     if startup_warnings:
-        print("⚠️ Startup diagnostics:")
-        for warning in startup_warnings:
+        print(f"STATUS  : Diagnostics ({len(startup_warnings)} warnings)")
+        for warning in startup_warnings[:3]:
             print(f"- {warning}")
 
     try:
@@ -31,15 +30,17 @@ def run_jarvis():
             if not text or len(text.strip()) < 2:
                 continue
 
-            print(f"\n🧑 You: {text}")
+            print("\n----------------------------------------")
+            print(f"USER    : {text}")
+            print("JARVIS  : Thinking...")
             text_lower = text.lower()
             add_task(text)
 
             response = handle_system_command(text)
 
             if response:
-                print("⚙️ Executing task...")
-                print(f"🤖 Jarvis: {response}")
+                print(f"JARVIS  : {response}")
+                print("----------------------------------------\n")
                 speak(response)
                 time.sleep(0.7)
                 continue
@@ -61,16 +62,13 @@ def run_jarvis():
                 response = f"The current time is {get_time()}"
 
             elif "write code" in text_lower or "python program" in text_lower:
-                print("⚡ Generating code...")
                 code = generate_response(f"Write Python code for: {text}")
                 write_code_to_file(code)
                 response = "Code has been written to file."
 
             elif "do this" in text_lower or "task" in text_lower:
-                print("🧠 Planning...")
                 steps = create_plan(text)
                 if steps:
-                    print("Plan:", steps)
                     response = execute_plan(steps)
                 else:
                     response = "I couldn't create a plan."
@@ -123,19 +121,18 @@ def run_jarvis():
                 elif intent == "agent_task":
                     response = run_external_agent(text)
                 else:
-                    thinking_thread = start_thinking()
                     try:
-                        response = stream_response(text)
+                        response = generate_response(text)
                     except Exception:
                         response = generate_response(text)
-                    stop_thinking()
 
-            print(f"🤖 Jarvis: {response}")
+            print(f"JARVIS  : {response}")
+            print("----------------------------------------\n")
             speak(response)
             time.sleep(0.7)
 
     except KeyboardInterrupt:
-        print("\n👋 Jarvis stopped.")
+        print("\nSYSTEM  : Jarvis stopped.")
 
 
 if __name__ == "__main__":

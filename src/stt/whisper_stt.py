@@ -1,7 +1,7 @@
 from faster_whisper import WhisperModel
 from src.audio.vad_recorder import record_speech
 
-model = WhisperModel("base", device="cpu")
+model = WhisperModel("base", device="cpu", compute_type="float32")
 
 
 def transcribe_audio():
