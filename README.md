@@ -2,6 +2,8 @@
 
 Jarvis is a local, voice-enabled AI assistant for Windows that combines speech recognition, local LLM responses, text-to-speech, desktop automation, and optional browser/vision tools.
 
+Status: This is an experimental project and is still in progress.
+
 ## What It Does
 
 - Listens to microphone input and transcribes speech using Faster-Whisper.
