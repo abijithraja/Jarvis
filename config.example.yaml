@@ -1,0 +1,54 @@
+# Jarvis configuration
+# Copy this to config.yaml and fill in your keys.
+# Never commit config.yaml to git.
+
+llm:
+  model: "qwen2.5:14b"
+  ollama_url: "http://localhost:11434"
+  temperature: 0.7
+  top_p: 0.9
+  repeat_penalty: 1.1
+  max_tokens: 256
+
+stt:
+  model: "base"           # tiny | base | small | medium | large
+  language: "en"
+  device: "cpu"           # cpu | cuda
+
+tts:
+  engine: "edge-tts"      # edge-tts | pyttsx3
+  voice: "en-US-GuyNeural"
+  rate: "+10%"
+
+wake_word:
+  engine: "none"          # none | porcupine | openwakeword
+  keyword: "hey jarvis"
+  porcupine_key: ""       # get free key at picovoice.io
+
+user:
+  name: ""
+  city: "Chennai"         # for weather skill
+  safe_mode: true         # confirm before destructive actions
+
+skills:
+  weather:
+    enabled: true
+    api_key: ""           # openweathermap.org free tier
+  news:
+    enabled: true
+    feed: "https://feeds.bbcnews.com/news/rss.xml"
+  spotify:
+    enabled: false
+    token: ""             # Spotify OAuth token
+  reminders:
+    enabled: true
+  file_ops:
+    enabled: true
+  code_runner:
+    enabled: true
+    timeout_seconds: 10
+
+logging:
+  level: "INFO"           # DEBUG | INFO | WARNING | ERROR
+  max_size_mb: 2
+  backup_count: 3

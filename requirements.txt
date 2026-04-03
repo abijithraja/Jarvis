@@ -1,0 +1,34 @@
+# Core voice pipeline
+faster-whisper
+sounddevice
+numpy
+scipy
+
+# Premium TTS (neural voices - free, no API key needed)
+edge-tts
+pyttsx3
+
+# LLM
+requests
+
+# Desktop control
+pyautogui
+pygetwindow
+
+# Browser automation
+selenium
+webdriver-manager
+
+# Vision OCR
+pytesseract
+opencv-python
+
+# Web / scraping
+beautifulsoup4
+lxml
+
+# Audio playback for edge-tts (Linux only — Windows/Mac built-in)
+# sudo apt install mpg123
+
+# VAD
+webrtcvad-wheels

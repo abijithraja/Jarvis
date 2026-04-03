@@ -1,5 +1,0 @@
-model: llama3
-tts: pyttsx3
-wake_word: jarvis
-agent_enabled: false
-safe_mode: true
