@@ -250,6 +250,54 @@ def _spotify_api(lower: str, token: str) -> str:
     return "Spotify command not recognised."
 
 
+# ─── WhatsApp automation ─────────────────────────────────────────────────────
+
+@skill("whatsapp", [
+    "whatsapp",
+    "whats app",
+    "attend call",
+    "answer call",
+    "accept call",
+    "decline call",
+    "reject call",
+    "incoming call",
+    "convey message",
+    "send message to caller",
+])
+def whatsapp_skill(text: str) -> str | None:
+    from src.agent.whatsapp_agent import handle_whatsapp_command
+
+    return handle_whatsapp_command(text)
+
+
+@skill("browser_addon", [
+    "open new tab",
+    "switch to tab",
+    "close this tab",
+    "show all tabs",
+    "summarize this page",
+    "read the page",
+    "get all links",
+    "save page as pdf",
+    "take a screenshot",
+    "search youtube",
+    "search wikipedia",
+    "open gmail",
+    "compose email",
+    "monitor this page",
+    "run javascript",
+    "highlight",
+])
+def browser_addon_skill(text: str) -> str | None:
+    """Route advanced browser commands to jarvis_addons Playwright dispatcher."""
+    try:
+        from jarvis_addons.browser.browser_dispatcher import dispatch_browser
+    except Exception:
+        return None
+
+    return dispatch_browser(text)
+
+
 # ─── File operations ─────────────────────────────────────────────────────────
 
 @skill("file_ops", ["read file", "open file", "show file", "list files", "delete file", "rename file"])

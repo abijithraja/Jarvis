@@ -11,6 +11,7 @@ Status: experimental and actively evolving.
 - TTS output with pyttsx3 (and optional edge-tts)
 - Desktop actions: open and close apps, typing, screenshots, volume
 - Spotify controls: open, play, pause, stop, next, previous, resume, close
+- WhatsApp Web automation: open, message with emoji, voice call, incoming-call actions
 - YouTube play flow: "open youtube and play ..."
 - Reminders and timer commands
 - Memory commands (store and recall personal context)
@@ -92,6 +93,29 @@ YouTube and web:
 - open youtube and play rain music
 - search latest ai trends
 - give me a summary about latest ai trends
+
+WhatsApp:
+
+- open whatsapp
+- send message to Alex saying hi smile emoji
+- make whatsapp call to Alex
+- attend call
+- decline call
+- convey message I will call you in ten minutes
+- use whatsapp desktop mode
+- use whatsapp web mode
+
+Notes:
+
+- Default mode is WhatsApp Desktop (`JARVIS_WHATSAPP_MODE=desktop`).
+- You can speak partial names; Jarvis will try best-match search instead of requiring exact contact title.
+- use whatsapp desktop mode
+- use whatsapp web mode
+
+Notes:
+
+- Default mode is WhatsApp Desktop (`JARVIS_WHATSAPP_MODE=desktop`).
+- You can speak partial names; Jarvis will try best-match search instead of requiring exact contact title.
 
 System:
 

@@ -13,6 +13,8 @@ import platform
 import pyttsx3
 
 _lock = threading.Lock()
+_current_player = None
+_current_engine = None
 
 VOICE = os.environ.get("JARVIS_VOICE", "en-US-GuyNeural")
 RATE  = os.environ.get("JARVIS_RATE",  "+10%")
@@ -43,6 +45,33 @@ def speak(text: str, rate: str = None, pitch: str = "+0Hz"):
             return
         _pyttsx3_speak(text)
 
+
+def stop_speaking():
+    """Best-effort stop for active TTS playback during shutdown."""
+    global _current_player, _current_engine
+
+    try:
+        if _current_engine is not None:
+            _current_engine.stop()
+    except Exception:
+        pass
+    finally:
+        _current_engine = None
+
+    player = _current_player
+    if player is not None:
+        try:
+            if player.poll() is None:
+                player.terminate()
+                try:
+                    player.wait(timeout=1.0)
+                except Exception:
+                    player.kill()
+        except Exception:
+            pass
+        finally:
+            _current_player = None
+
 def _try_edge_tts(text: str, rate: str, pitch: str) -> bool:
     if not USE_EDGE_TTS:
         return False
@@ -69,29 +98,47 @@ async def _edge_speak(text: str, rate: str, pitch: str):
         pass
 
 def _play_audio(path: str):
+    global _current_player
+
     system = platform.system()
     if system == "Windows":
         # edge-tts saves MP3; play it with Windows Media Player when available.
-        subprocess.run(
+        player = subprocess.Popen(
             ["cmd", "/c", "start", "/min", "/wait", "", "wmplayer", "/play", "/close", path],
-            check=True,
             capture_output=True,
             text=True,
         )
+        _current_player = player
+        player.wait()
+        _current_player = None
+        if player.returncode not in (0, None):
+            raise subprocess.CalledProcessError(player.returncode, player.args, output=player.stdout, stderr=player.stderr)
         return
 
     if system == "Darwin":
-        subprocess.run(["afplay", path], check=True)
+        player = subprocess.Popen(["afplay", path])
+        _current_player = player
+        player.wait()
+        _current_player = None
+        if player.returncode not in (0, None):
+            raise subprocess.CalledProcessError(player.returncode, player.args)
         return
 
     for player in ["mpg123", "ffplay", "aplay"]:
         if shutil.which(player):
+            proc = None
             if player == "ffplay":
-                subprocess.run([player, "-nodisp", "-autoexit", "-loglevel", "quiet", path], check=True)
+                proc = subprocess.Popen([player, "-nodisp", "-autoexit", "-loglevel", "quiet", path])
             elif player == "mpg123":
-                subprocess.run([player, "-q", path], check=True)
+                proc = subprocess.Popen([player, "-q", path])
             else:
-                subprocess.run([player, path], check=True)
+                proc = subprocess.Popen([player, path])
+
+            _current_player = proc
+            proc.wait()
+            _current_player = None
+            if proc.returncode not in (0, None):
+                raise subprocess.CalledProcessError(proc.returncode, proc.args)
             return
 
     raise RuntimeError("No compatible audio player found for edge-tts output")
@@ -108,11 +155,14 @@ def _get_pyttsx_engine():
     return engine
 
 def _pyttsx3_speak(text: str):
+    global _current_engine
+
     last_error = None
     for _ in range(2):
         engine = None
         try:
             engine = _get_pyttsx_engine()
+            _current_engine = engine
             engine.say(text)
             engine.runAndWait()
             return
@@ -124,6 +174,7 @@ def _pyttsx3_speak(text: str):
                     engine.stop()
                 except Exception:
                     pass
+            _current_engine = None
     if last_error:
         print(f"TTS error: {last_error}")
 

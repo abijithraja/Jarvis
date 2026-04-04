@@ -5,14 +5,14 @@ from faster_whisper import WhisperModel
 model = WhisperModel("base", device="cpu", compute_type="float32")
 
 
-def transcribe_audio():
+def transcribe_audio(verbose: bool = True, stop_event=None):
     """
     Records speech via VAD, transcribes with Whisper.
     Returns transcribed string or None.
     """
     from src.audio.vad_recorder import record_speech
 
-    audio_path = record_speech()
+    audio_path = record_speech(verbose=verbose, stop_event=stop_event)
 
     if not audio_path:
         return None
@@ -29,7 +29,8 @@ def transcribe_audio():
         return text if text else None
 
     except Exception as e:
-        print(f"❌ Transcription error: {e}")
+        if verbose:
+            print(f"❌ Transcription error: {e}")
         return None
 
     finally:

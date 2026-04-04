@@ -1,5 +1,5 @@
 """
-Jarvis AI — Tier A main pipeline
+Jarvis Version 1
 Wake word → STT → Intent + Slots → Skills → Agents → LLM → TTS → Loop
 """
 
@@ -7,6 +7,9 @@ import time
 import logging
 import os
 import re
+import atexit
+import queue
+import threading
 from logging.handlers import RotatingFileHandler
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
@@ -14,7 +17,7 @@ from logging.handlers import RotatingFileHandler
 os.makedirs("logs", exist_ok=True)
 _log = logging.getLogger("jarvis")
 _log.setLevel(logging.DEBUG)
-_fh = RotatingFileHandler("logs/jarvis.log", maxBytes=2_000_000, backupCount=3)
+_fh = RotatingFileHandler("logs/jarvis.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
 _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 _log.addHandler(_fh)
 
@@ -26,7 +29,7 @@ from src.router.intent_router     import detect_intent, extract_slots, needs_cla
 from src.utils.system_tools       import get_time, get_date
 from src.agent.external_agent     import run_external_agent
 from src.agent.system_agent       import handle_system_command
-from src.tts.speaker              import speak
+from src.tts.speaker              import speak, stop_speaking
 from src.utils.animation          import start_thinking, stop_thinking
 from src.memory.memory_system     import (
     conversation, semantic, persona,
@@ -40,11 +43,34 @@ from src.agent.executor           import execute_plan
 from src.utils.runtime_checks     import collect_runtime_warnings
 from src.skills.skills            import dispatch as skill_dispatch
 
+try:
+    from jarvis_addons.addon_dispatcher import dispatch_addon as _dispatch_addon
+except Exception:
+    _dispatch_addon = None
+
+
+_tts_active = threading.Event()
+_input_dedupe_lock = threading.Lock()
+_last_input_norm = ""
+_last_input_ts = 0.0
+_runtime_stop_event = threading.Event()
+_instance_lock_handle = None
+
 
 # ─── Startup ─────────────────────────────────────────────────────────────────
 
 def run_jarvis():
     """Full continuous loop — used when running main.py directly."""
+    # Keep terminal output clean by default in CLI mode.
+    os.environ.setdefault("JARVIS_DISABLE_SPINNER", "1")
+
+    if not _acquire_instance_lock():
+        print("Jarvis is already running in another terminal/window.")
+        print("Close the other Jarvis instance first, then try again.")
+        return
+
+    _runtime_stop_event.clear()
+
     print("=" * 20)
     print("🤖  JARVIS ")
     print("=" * 20)
@@ -58,14 +84,41 @@ def run_jarvis():
 
     _start_reminder_watcher()
     speak("Hello, Jarvis is online.")
-    print("\nReady. Say 'Hey Jarvis' or just speak.\n")
+    print("\nReady. Say 'Hey Jarvis' or just speak.")
+    print("You can also type a command and press Enter. Type 'exit' to stop.\n")
+
+    text_queue: queue.Queue[str] = queue.Queue()
+    voice_queue: queue.Queue[str] = queue.Queue()
+    stop_event = threading.Event()
+    text_thread = _start_cli_text_listener(text_queue, stop_event)
+    voice_thread = _start_cli_voice_listener(voice_queue, stop_event)
 
     try:
         while True:
-            run_jarvis_once()
+            typed = _dequeue_cli_text(text_queue)
+            if typed:
+                if _is_cli_exit_command(typed):
+                    _announce_exit()
+                    break
+                _process_user_text(typed)
+                continue
+
+            spoken = _dequeue_cli_text(voice_queue)
+            if spoken:
+                _process_user_text(spoken)
+                continue
+
+            time.sleep(0.05)
     except KeyboardInterrupt:
-        print("\n👋  Jarvis stopped.")
-        speak("Goodbye!")
+        _announce_exit()
+    finally:
+        stop_event.set()
+        _runtime_stop_event.set()
+        _force_shutdown_audio()
+        for t in (text_thread, voice_thread):
+            if t and t.is_alive():
+                t.join(timeout=1.0)
+        _release_instance_lock()
 
 
 def run_jarvis_once(gui=None):
@@ -73,6 +126,23 @@ def run_jarvis_once(gui=None):
     text = transcribe_audio()
     if not text or len(text.strip()) < 2:
         return
+
+    _process_user_text(text, gui=gui)
+
+
+def _process_user_text(text: str, gui=None) -> str:
+    """Handle one user utterance regardless of source (voice or typed)."""
+    text = text.strip()
+    if not text:
+        return ""
+
+    if _is_assistant_echo_input(text):
+        _log.debug(f"Skipped assistant-echo input: {text}")
+        return ""
+
+    if _is_duplicate_input(text):
+        _log.debug(f"Skipped duplicate input: {text}")
+        return ""
 
     print(f"\n🧑  You: {text}")
     _log.info(f"User: {text}")
@@ -87,8 +157,191 @@ def run_jarvis_once(gui=None):
     conversation.add_assistant(response)
     semantic.add(text)
 
-    speak(response)
+    _tts_active.set()
+    try:
+        speak(response)
+    finally:
+        _tts_active.clear()
     time.sleep(0.25)
+    return response
+
+
+def _start_cli_text_listener(text_queue: queue.Queue[str], stop_event: threading.Event):
+    """Background input listener so terminal users can type while voice mode is running."""
+
+    def _reader():
+        while not stop_event.is_set():
+            try:
+                line = input()
+            except EOFError:
+                break
+            except Exception:
+                break
+
+            if stop_event.is_set():
+                break
+
+            text = (line or "").strip()
+            if text:
+                text_queue.put(text)
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    return t
+
+
+def _start_cli_voice_listener(voice_queue: queue.Queue[str], stop_event: threading.Event):
+    """Background voice listener for hybrid terminal mode (typed + spoken)."""
+
+    def _voice_reader():
+        while not stop_event.is_set():
+            if _tts_active.is_set():
+                time.sleep(0.08)
+                continue
+
+            text = transcribe_audio(verbose=False, stop_event=stop_event)
+            if stop_event.is_set():
+                break
+            if text and len(text.strip()) >= 2:
+                voice_queue.put(text.strip())
+
+    t = threading.Thread(target=_voice_reader, daemon=True)
+    t.start()
+    return t
+
+
+def _dequeue_cli_text(text_queue: queue.Queue[str]) -> str | None:
+    try:
+        return text_queue.get_nowait()
+    except queue.Empty:
+        return None
+
+
+def _is_cli_exit_command(text: str) -> bool:
+    return text.strip().lower() in {"exit", "quit", "stop", "bye", "close jarvis", "stop jarvis"}
+
+
+def _is_duplicate_input(text: str, window_seconds: float = 2.0) -> bool:
+    global _last_input_norm, _last_input_ts
+
+    normalized = re.sub(r"\s+", " ", text.lower()).strip()
+    if not normalized:
+        return False
+
+    now = time.time()
+    with _input_dedupe_lock:
+        is_dup = normalized == _last_input_norm and (now - _last_input_ts) <= window_seconds
+        if not is_dup:
+            _last_input_norm = normalized
+            _last_input_ts = now
+        return is_dup
+
+
+def _is_assistant_echo_input(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not normalized:
+        return False
+
+    patterns = [
+        r"^sent whatsapp desktop message to .+?: .+",
+        r"^sent whatsapp message to .+?: .+",
+        r"^what message should i send to .+\?$",
+        r"^who should i send the message to\??$",
+        r"^whatsapp desktop is open and ready\.?$",
+    ]
+    return any(re.match(p, normalized) for p in patterns)
+
+
+def _announce_exit():
+    print("\n👋  Jarvis stopped.")
+
+    # Keep CLI exit instant by default. Set JARVIS_SPEAK_EXIT=1 to hear goodbye.
+    speak_exit = os.environ.get("JARVIS_SPEAK_EXIT", "0").strip().lower() in {"1", "true", "yes", "on"}
+    if speak_exit:
+        _tts_active.set()
+        try:
+            speak("Goodbye!")
+        finally:
+            _tts_active.clear()
+
+
+def _force_shutdown_audio():
+    """Stop any active audio capture/playback immediately during shutdown."""
+    try:
+        import sounddevice as sd
+        sd.stop()
+    except Exception:
+        pass
+
+    try:
+        stop_speaking()
+    except Exception:
+        pass
+
+
+def _acquire_instance_lock() -> bool:
+    """Allow only one active Jarvis process at a time per machine/user profile."""
+    global _instance_lock_handle
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    lock_path = os.path.join(base_dir, "logs", "jarvis.instance.lock")
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+
+    try:
+        _instance_lock_handle = open(lock_path, "a+")
+    except Exception:
+        _instance_lock_handle = None
+        return True
+
+    try:
+        if os.name == "nt":
+            import msvcrt
+            _instance_lock_handle.seek(0)
+            msvcrt.locking(_instance_lock_handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(_instance_lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except Exception:
+        try:
+            _instance_lock_handle.close()
+        except Exception:
+            pass
+        _instance_lock_handle = None
+        return False
+
+    try:
+        _instance_lock_handle.seek(0)
+        _instance_lock_handle.truncate()
+        _instance_lock_handle.write(str(os.getpid()))
+        _instance_lock_handle.flush()
+    except Exception:
+        pass
+
+    return True
+
+
+def _release_instance_lock():
+    global _instance_lock_handle
+    if not _instance_lock_handle:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt
+            _instance_lock_handle.seek(0)
+            msvcrt.locking(_instance_lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(_instance_lock_handle.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        _instance_lock_handle.close()
+    except Exception:
+        pass
+    _instance_lock_handle = None
+
+
+atexit.register(_release_instance_lock)
 
 
 # ─── Core text processor (also used by GUI text input) ───────────────────────
@@ -114,6 +367,12 @@ def process_text(text: str, gui=None) -> str:
     r = handle_system_command(text)
     if r:
         _log.debug(f"System agent: {r}")
+        return r
+
+    # 3.5 Addons dispatcher (window manager, screen reader, contacts, etc.)
+    r = _handle_addons(text)
+    if r:
+        _log.debug(f"Addons: {r}")
         return r
 
     # 4. Time / Date (no LLM)
@@ -206,7 +465,41 @@ def _handle_memory(text_lower: str):
 
 def _handle_skills(text: str, enabled_skills: set | None) -> str | None:
     result = skill_dispatch(text, enabled_skills)
-    return result
+    if result:
+        return result
+
+    # Fallback: route WhatsApp intents even when keyword scoring misses typos.
+    allow_whatsapp = enabled_skills is None or "whatsapp" in enabled_skills
+    if allow_whatsapp:
+        try:
+            from src.agent.whatsapp_agent import handle_whatsapp_command
+
+            wa_result = handle_whatsapp_command(text)
+            if wa_result:
+                return wa_result
+        except Exception:
+            pass
+
+    return None
+
+
+def _handle_addons(text: str) -> str | None:
+    if _dispatch_addon is None:
+        return None
+
+    # Keep WhatsApp commands in the primary WhatsApp agent to avoid addon conflicts.
+    try:
+        from src.agent.whatsapp_agent import is_whatsapp_intent
+
+        if is_whatsapp_intent(text):
+            return None
+    except Exception:
+        pass
+
+    try:
+        return _dispatch_addon(text)
+    except Exception:
+        return None
 
 
 def _handle_code_gen(text: str) -> str:
@@ -297,10 +590,16 @@ def _start_reminder_watcher():
     import threading
 
     def _watch():
-        while True:
+        while not _runtime_stop_event.is_set():
             try:
                 for r in get_pending_reminders():
-                    speak(f"Reminder: {r['message']}")
+                    if _runtime_stop_event.is_set():
+                        break
+                    _tts_active.set()
+                    try:
+                        speak(f"Reminder: {r['message']}")
+                    finally:
+                        _tts_active.clear()
                     print(f"\n🔔  Reminder: {r['message']}")
                     mark_reminder_fired(r["id"])
             except Exception:

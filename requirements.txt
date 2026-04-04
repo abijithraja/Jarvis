@@ -18,10 +18,13 @@ pygetwindow
 # Browser automation
 selenium
 webdriver-manager
+playwright
 
 # Vision OCR
 pytesseract
 opencv-python
+pillow
+pyperclip
 
 # Web / scraping
 beautifulsoup4

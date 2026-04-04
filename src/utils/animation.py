@@ -1,12 +1,18 @@
 import threading
 import time
 import sys
+import os
 
 _stop_event = threading.Event()
 _thread = None
 
 
 def _animate():
+    if os.environ.get("JARVIS_DISABLE_SPINNER", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        while not _stop_event.is_set():
+            time.sleep(0.1)
+        return
+
     frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     i = 0
     while not _stop_event.is_set():

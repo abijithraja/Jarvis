@@ -96,12 +96,13 @@ def calibrate_microphone(seconds: float = 5.0) -> dict:
     }
 
 
-def record_speech():
+def record_speech(verbose: bool = True, stop_event=None):
     """
     Records audio from the microphone until silence is detected.
     Returns path to a temporary .wav file, or None on failure.
     """
-    print("🎙️  Listening...", flush=True)
+    if verbose:
+        print("🎙️  Listening...", flush=True)
 
     chunks = []
     silent_chunks = 0
@@ -116,6 +117,9 @@ def record_speech():
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS,
                             dtype='int16', blocksize=CHUNK_SIZE, device=input_device) as stream:
             for _ in range(max_chunks):
+                if stop_event is not None and stop_event.is_set():
+                    return None
+
                 data, _ = stream.read(CHUNK_SIZE)
                 chunk = data[:, 0] if data.ndim > 1 else data.flatten()
                 chunks.append(chunk.copy())
@@ -132,12 +136,17 @@ def record_speech():
                 if speaking_started and silent_chunks >= silence_chunks_needed:
                     break
 
+                if stop_event is not None and stop_event.is_set():
+                    return None
+
     except Exception as e:
-        print(f"❌ Microphone error: {e}")
+        if verbose:
+            print(f"❌ Microphone error: {e}")
         return None
 
     if not speaking_started or len(chunks) < 3:
-        print("⚠️  I couldn't hear clear speech. Try speaking a bit louder.")
+        if verbose:
+            print("⚠️  I couldn't hear clear speech. Try speaking a bit louder.")
         return None
 
     audio = np.concatenate(chunks)
