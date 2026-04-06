@@ -11,7 +11,6 @@ import atexit
 import queue
 import threading
 from logging.handlers import RotatingFileHandler
-
 # ─── Logging setup ────────────────────────────────────────────────────────────
 
 os.makedirs("logs", exist_ok=True)
