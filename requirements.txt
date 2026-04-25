@@ -4,6 +4,7 @@ sounddevice
 numpy
 scipy
 
+
 # Premium TTS (neural voices - free, no API key needed)
 edge-tts
 pyttsx3
