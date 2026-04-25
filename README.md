@@ -1,4 +1,4 @@
-# Jarvis AI Assistant
+# Jarvis AI Assistant (Prototype)
 
 Jarvis is a local, voice-enabled AI assistant for Windows. It supports speech input, local LLM responses, text-to-speech, desktop automation, Spotify controls, YouTube play commands, reminders, and memory.
 
